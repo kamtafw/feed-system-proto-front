@@ -43,7 +43,7 @@ export default function App() {
 		if (currentUser) loadTimeline(currentUser.id)
 	}
 
-	// ── Personal WebSocket (NEW_POST) ─────────────────────────────────────────
+	// Personal WebSocket (NEW_POST)
 	useUserWebSocket(
 		currentUser?.id ?? null,
 		useCallback((_msg: NewPostWSMessage) => {
@@ -51,7 +51,7 @@ export default function App() {
 		}, []),
 	)
 
-	// ── System event log ──────────────────────────────────────────────────────
+	// System event log
 	useSystemEvents(
 		useCallback((evt: SystemEvent) => {
 			setLogEntries((prev) => [
@@ -75,7 +75,7 @@ export default function App() {
 		if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handlePost()
 	}
 
-	// ── Follow ────────────────────────────────────────────────────────────────
+	// follow
 	const handleFollow = async (targetId: string) => {
 		if (!currentUser) return
 		if (following.has(targetId)) {
@@ -95,7 +95,6 @@ export default function App() {
 
 	return (
 		<div className="app">
-			{/* ── Header ── */}
 			<header className="header">
 				<div className="logo">
 					<span className="logo-icon">⚡</span>
@@ -129,7 +128,7 @@ export default function App() {
 				</div>
 			) : (
 				<div className="layout">
-					{/* ── Sidebar: People ── */}
+					{/* Sidebar: People */}
 					<aside className="sidebar">
 						<h3 className="sidebar-title">People</h3>
 						{otherUsers.map((u) => {
@@ -150,9 +149,9 @@ export default function App() {
 						})}
 					</aside>
 
-					{/* ── Main Feed ── */}
+					{/* Main Feed */}
 					<main className="feed">
-						{/* New post banner */}
+						{/* new post banner */}
 						{newCount > 0 && (
 							<button className="banner" onClick={handleBannerClick}>
 								↑ {newCount} new post{newCount > 1 ? "s" : ""} — click to load
@@ -213,7 +212,6 @@ export default function App() {
 						</div>
 					</main>
 
-					{/* ── Event Log ── */}
 					<EventLog entries={logEntries} />
 				</div>
 			)}
