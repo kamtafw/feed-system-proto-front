@@ -1,9 +1,9 @@
+/* eslint-disable react-hooks/refs */
 import { useEffect, useRef } from "react"
 import type { SystemEvent } from "../types"
 
 export function useSystemEvents(onEvent: (e: SystemEvent) => void) {
 	const cbRef = useRef(onEvent)
-	// eslint-disable-next-line react-hooks/refs
 	cbRef.current = onEvent // always up-to-date without re-triggering effect
 
 	useEffect(() => {
