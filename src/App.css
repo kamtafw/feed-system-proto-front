@@ -653,3 +653,162 @@ body {
 .log-offline {
 	color: var(--text-muted);
 }
+
+/* ── Login ──────────────────────────────────────────────────────────────── */
+.login-wrap {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 100vh;
+	background: var(--bg);
+}
+
+.login-card {
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	padding: 32px;
+	width: 360px;
+	display: flex;
+	flex-direction: column;
+	gap: 20px;
+}
+
+.login-logo {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	justify-content: center;
+	margin-bottom: 4px;
+}
+
+.login-tabs {
+	display: flex;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	overflow: hidden;
+}
+
+.login-tab {
+	flex: 1;
+	padding: 8px;
+	background: transparent;
+	border: none;
+	color: var(--text-muted);
+	cursor: pointer;
+	font-size: 13px;
+	font-family: inherit;
+	transition: all 0.15s;
+}
+
+.login-tab-active {
+	background: var(--indigo);
+	color: #fff;
+}
+
+.login-fields {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.login-input {
+	width: 100%;
+	padding: 10px 12px;
+	background: var(--surface-2);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	color: var(--text);
+	font-size: 14px;
+	font-family: inherit;
+	outline: none;
+	transition: border-color 0.15s;
+}
+
+.login-input:focus {
+	border-color: var(--indigo);
+}
+
+.login-error {
+	color: var(--red);
+	font-size: 13px;
+	text-align: center;
+	margin: 0;
+}
+
+.login-btn {
+	width: 100%;
+	padding: 10px;
+	background: var(--indigo);
+	border: none;
+	border-radius: var(--radius-sm);
+	color: #fff;
+	font-size: 14px;
+	font-weight: 600;
+	font-family: inherit;
+	cursor: pointer;
+	transition: background 0.15s;
+}
+
+.login-btn:hover:not(:disabled) {
+	background: var(--indigo-dim);
+}
+.login-btn:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+
+.login-hint {
+	font-size: 11px;
+	color: var(--text-muted);
+	text-align: center;
+	margin: 0;
+}
+
+.login-hint code {
+	font-family: var(--mono);
+	color: var(--cyan);
+}
+
+/* ── Header user ─────────────────────────────────────────────────────────── */
+.header-user {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-left: auto;
+}
+
+.header-avatar {
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	background: var(--indigo);
+	color: #fff;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 12px;
+	font-weight: 700;
+}
+
+.header-name {
+	font-size: 13px;
+	color: var(--text-dim);
+}
+
+.logout-btn {
+	padding: 4px 12px;
+	border: 1px solid var(--border);
+	border-radius: 12px;
+	background: transparent;
+	color: var(--text-muted);
+	font-size: 12px;
+	font-family: inherit;
+	cursor: pointer;
+	transition: all 0.15s;
+}
+
+.logout-btn:hover {
+	border-color: var(--red);
+	color: var(--red);
+}

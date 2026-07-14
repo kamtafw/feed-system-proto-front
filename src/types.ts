@@ -10,7 +10,17 @@ export interface Post {
 	created_at: number
 }
 
-// personal WS message (from /ws/{user_id})
+export interface AuthTokens {
+	access_token: string
+	refresh_token: string
+	token_type: string
+}
+
+export interface AuthResponse extends AuthTokens {
+	user: User
+}
+
+// personal WebSocket message (from /ws/{user_id})
 export interface NewPostWSMessage {
 	type: "NEW_POST"
 	post_id: string
@@ -18,7 +28,7 @@ export interface NewPostWSMessage {
 	author_name: string
 }
 
-// system event types (from /ws/events)
+// system event types (broadcast channel — from /ws/events)
 export type SystemEvent =
 	| { event: "POST_CREATED"; post_id: string; author: string; content: string; ts: number }
 	| { event: "FANOUT_START"; post_id: string; author: string; followers: string[]; ts: number }
