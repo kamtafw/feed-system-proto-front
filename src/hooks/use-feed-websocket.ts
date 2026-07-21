@@ -18,6 +18,7 @@
 
 import { useEffect, useRef } from "react"
 import type { NewPostWSMessage } from "../types"
+import { WS_BASE } from "../config"
 
 export function useFeedWebSocket(token: string | null, onNewPost: (msg: NewPostWSMessage) => void) {
 	const cbRef = useRef(onNewPost)
@@ -26,7 +27,7 @@ export function useFeedWebSocket(token: string | null, onNewPost: (msg: NewPostW
 	useEffect(() => {
 		if (!token) return
 
-		const ws = new WebSocket(`ws://localhost:8000/ws/feed?token=${token}`)
+		const ws = new WebSocket(`${WS_BASE}/ws/feed?token=${token}`)
 
 		ws.onmessage = (e) => {
 			try {

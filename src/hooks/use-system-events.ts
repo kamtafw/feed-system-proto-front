@@ -1,13 +1,14 @@
 /* eslint-disable react-hooks/refs */
 import { useEffect, useRef } from "react"
 import type { SystemEvent } from "../types"
+import { WS_BASE } from "../config"
 
 export function useSystemEvents(onEvent: (e: SystemEvent) => void) {
 	const cbRef = useRef(onEvent)
 	cbRef.current = onEvent // always up-to-date without re-triggering effect
 
 	useEffect(() => {
-		const ws = new WebSocket("ws://localhost:8000/ws/events")
+		const ws = new WebSocket(`${WS_BASE}/ws/events`)
 
 		ws.onmessage = (e) => {
 			try {
