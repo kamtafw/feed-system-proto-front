@@ -10,9 +10,10 @@
  * store refresh tokens in an httpOnly cookie to prevent XSS access.
  */
 
+import { HTTP_BASE } from "./config"
 import type { AuthResponse, Post, User } from "./types"
 
-const BASE = "http://localhost:8000"
+const BASE = HTTP_BASE
 
 const ACCESS_KEY = "ff_access"
 const REFRESH_KEY = "ff_refresh"
