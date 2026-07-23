@@ -93,9 +93,19 @@ export default function App() {
 	const handlePost = async () => {
 		if (!content.trim() || posting) return
 		setPosting(true)
-		await api.createPost(content.trim())
+		const text = content.trim()
+		const { post_id } = await api.createPost(text)
+		setTimeline((prev) => [
+			{
+				id: post_id,
+				author_id: currentUser!.id,
+				author_name: currentUser!.name,
+				content: text,
+				created_at: Date.now() / 1000,
+			},
+			...prev,
+		])
 		setContent("")
-		loadTimeline()
 		setPosting(false)
 	}
 
