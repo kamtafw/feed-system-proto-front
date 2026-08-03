@@ -7,6 +7,7 @@ import { useSystemEvents } from "./hooks/use-system-events"
 import type { AuthResponse, Post, SystemEvent, User } from "./types"
 import { useFeedWebSocket } from "./hooks/use-feed-websocket"
 import { LoginForm } from "./components/login-form"
+import { useInfiniteScroll } from "./hooks/use-infinite-scroll"
 
 let logIdCounter = 0
 
@@ -23,6 +24,12 @@ export default function App() {
 	const [posting, setPosting] = useState(false)
 	const [newCount, setNewCount] = useState(0)
 	const [logEntries, setLogEntries] = useState<LogEntry[]>([])
+
+	// pagination state (Milestone 6)
+	// nextCursor is opaque — never parsed, just stored and echoed back.
+	const [nextCursor, setNextCursor] = useState<string | null>(null)
+	const [hasMore, setHasMore] = useState(false) // false until the first page confirms otherwise
+	const [loadingMore, setLoadingMore] = useState(false)
 
 	// restore session from localStorage on mount
 	useEffect(() => {
@@ -45,7 +52,13 @@ export default function App() {
 	useEffect(() => {
 		if (!currentUser) return
 		setNewCount(0)
-		api.getTimeline(currentUser.id).then(setTimeline)
+		setHasMore(false)
+		setNextCursor(null)
+		api.getTimeline(currentUser.id).then((page) => {
+			setTimeline(page.posts)
+			setNextCursor(page.next_cursor)
+			setHasMore(page.next_cursor !== null)
+		})
 		api.getFollowing().then((ids) => setFollowing(new Set(ids)))
 		api.getUsers().then(setUsers)
 	}, [currentUser])
@@ -63,16 +76,42 @@ export default function App() {
 		setTimeline([])
 		setFollowing(new Set())
 		setNewCount(0)
+		setNextCursor(null)
+		setHasMore(false)
 	}
 
-	// timeline
+	// timeline — top-of-feed refresh (the "N new posts" banner)
+	// NOTE: this intentionally resets pagination back to page 1. If you've
+	// scrolled several pages into history and then click the banner, those
+	// older loaded pages are discarded in favor of a fresh top-of-feed view.
+	// That's existing behavior carried over from before this milestone —
+	// not something M6 introduces or fixes.
 	const loadTimeline = useCallback(() => {
 		if (!currentUser) return
-		api.getTimeline(currentUser.id).then((posts) => {
-			setTimeline(posts)
+		api.getTimeline(currentUser.id).then((page) => {
+			setTimeline(page.posts)
+			setNextCursor(page.next_cursor)
+			setHasMore(page.next_cursor !== null)
 			setNewCount(0)
 		})
 	}, [currentUser])
+
+	// timeline — infinite scroll (append older posts to the tail)
+	const loadMore = useCallback(() => {
+		if (!currentUser || !hasMore || loadingMore) return
+		setLoadingMore(true)
+		api
+			.getTimeline(currentUser.id, nextCursor ?? undefined)
+			.then((page) => {
+				setTimeline((prev) => [...prev, ...page.posts])
+				setNextCursor(page.next_cursor)
+				setHasMore(page.next_cursor !== null)
+			})
+			.catch((e) => console.error("Failed to load more posts:", e))
+			.finally(() => setLoadingMore(false))
+	}, [currentUser, hasMore, loadingMore, nextCursor])
+
+	const sentinelRef = useInfiniteScroll(loadMore, hasMore && !loadingMore)
 
 	// personal WebSocket (NEW_POST)
 	useFeedWebSocket(
@@ -96,6 +135,8 @@ export default function App() {
 		try {
 			const text = content.trim()
 			const { post_id } = await api.createPost(text)
+			// optimistic prepend — only touches the HEAD of the array, never
+			// the pagination cursor at the tail. Unrelated to the M6 changes.
 			setTimeline((prev) => [
 				{
 					id: post_id,
@@ -109,7 +150,6 @@ export default function App() {
 			setContent("")
 		} catch (e) {
 			console.error("Failed to post:", e)
-			// optionally surface an error to the user here
 		} finally {
 			setPosting(false)
 		}
@@ -236,6 +276,18 @@ export default function App() {
 									</div>
 								</div>
 							))
+						)}
+
+						{/*	Milestone 6: infinite scroll sentinel — only rendered/observed
+								while more pages exist. loadMore() fires when it enters the
+								viewport (200px before it's actually visible). */}
+						{hasMore && (
+							<div ref={sentinelRef} className="scroll-sentinel">
+								{loadingMore ? "Loading more…" : ""}
+							</div>
+						)}
+						{!hasMore && timeline.length > 0 && (
+							<div className="feed-end">You've reached the beginning of the feed.</div>
 						)}
 					</div>
 				</main>

@@ -10,6 +10,15 @@ export interface Post {
 	created_at: number
 }
 
+// Milestone 6 — cursor-based timeline pagination.
+// next_cursor is OPAQUE from the frontend's perspective: store it, pass it
+// back verbatim on the next request, never parse or construct it.
+// See ADR-2 in docs/milestone-6-cursor-pagination.md.
+export interface TimelinePage {
+	posts: Post[]
+	next_cursor: string | null
+}
+
 export interface AuthTokens {
 	access_token: string
 	refresh_token: string
