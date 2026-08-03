@@ -298,6 +298,9 @@ body {
 	border: 1px solid var(--border);
 	border-radius: var(--radius);
 	padding: 14px;
+	position: sticky; /* M6 fix: stay reachable while scrolling deep pages */
+	top: 12px;
+	z-index: 10; /* sit above post cards as they scroll underneath */
 }
 
 .compose-avatar {
@@ -467,6 +470,22 @@ body {
 }
 
 .empty-hint {
+	font-size: 12px;
+	opacity: 0.6;
+}
+
+.scroll-sentinel {
+	text-align: center;
+	padding: 16px;
+	color: var(--text-muted);
+	font-size: 12px;
+	font-family: var(--mono);
+}
+
+.feed-end {
+	text-align: center;
+	padding: 20px;
+	color: var(--text-muted);
 	font-size: 12px;
 	opacity: 0.6;
 }

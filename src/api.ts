@@ -5,13 +5,10 @@
  *   - Access token stored in localStorage (ff_access)
  *   - Refresh token stored in localStorage (ff_refresh)
  *   - authedFetch() attaches Bearer header and retries once on 401 (via refresh)
- *
- * localStorage for tokens is fine for this prototype. In production you'd
- * store refresh tokens in an httpOnly cookie to prevent XSS access.
  */
 
 import { HTTP_BASE } from "./config"
-import type { AuthResponse, Post, User } from "./types"
+import type { AuthResponse, TimelinePage, User } from "./types"
 
 const BASE = HTTP_BASE
 
@@ -128,13 +125,22 @@ export const auth = {
 	},
 }
 
-// Application API (all require auth)
+// Application API (all require auth unless noted)
 
 export const api = {
 	getUsers: (): Promise<User[]> => fetch(`${BASE}/users`).then((r) => r.json()),
 
-	getTimeline: (userId: string): Promise<Post[]> =>
-		fetch(`${BASE}/timeline/${userId}`).then((r) => r.json()),
+	/**
+	 * Milestone 6: cursor-based pagination. Omit `cursor` for the first
+	 * page. `cursor` is opaque — pass back exactly what the previous
+	 * TimelinePage.next_cursor gave you, never construct or parse it here.
+	 */
+	getTimeline: (userId: string, cursor?: string): Promise<TimelinePage> => {
+		const url = cursor
+			? `${BASE}/timeline/${userId}?cursor=${encodeURIComponent(cursor)}`
+			: `${BASE}/timeline/${userId}`
+		return fetch(url).then((r) => r.json())
+	},
 
 	getFollowing: (): Promise<string[]> => authedFetch(`${BASE}/me/following`).then((r) => r.json()),
 
