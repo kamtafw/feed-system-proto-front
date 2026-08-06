@@ -119,6 +119,24 @@ function EventRow({ entry }: { entry: LogEntry }) {
 				</div>
 			)
 
+		case "FANOUT_HEAVY":
+			return (
+				<div className="log-entry log-fanout-heavy">
+					<span className="log-time">{fmtTime(event.ts)}</span>
+					<span className="log-icon">👑</span>
+					<div className="log-body">
+						<div className="log-label">FANOUT_CONSUMER (heavy path)</div>
+						<div className="log-detail">
+							<span className="log-author">{event.author}</span>
+							{" → "}
+							<strong>{event.follower_count}</strong> follower
+							{event.follower_count !== 1 ? "s" : ""} — written to{" "}
+							<span className="log-id">authored:{event.author}</span> only
+						</div>
+					</div>
+				</div>
+			)
+
 		default:
 			return null
 	}
