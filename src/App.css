@@ -490,7 +490,7 @@ body {
 	opacity: 0.6;
 }
 
-/* ── Event Log ──────────────────────────────────────────────────────── */
+/* Event Log */
 .event-log {
 	background: var(--surface);
 	border: 1px solid var(--border);
@@ -601,6 +601,10 @@ body {
 .log-fanout {
 	border-left-color: var(--amber);
 }
+
+.log-fanout-heavy {
+	border-left-color: var(--purple); /* distinct from --amber (light fanout) */
+}
 .log-fanout-write {
 	border-left-color: var(--amber);
 	opacity: 0.8;
@@ -673,7 +677,7 @@ body {
 	color: var(--text-muted);
 }
 
-/* ── Login ──────────────────────────────────────────────────────────────── */
+/* Login */
 .login-wrap {
 	display: flex;
 	align-items: center;

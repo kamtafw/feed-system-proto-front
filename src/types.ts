@@ -42,6 +42,7 @@ export type SystemEvent =
 	| { event: "POST_CREATED"; post_id: string; author: string; content: string; ts: number }
 	| { event: "FANOUT_START"; post_id: string; author: string; followers: string[]; ts: number }
 	| { event: "FANOUT_WRITE"; target: string; post_id: string; ts: number }
+	| { event: "FANOUT_HEAVY"; post_id: string; author: string; follower_count: number; ts: number }
 	| { event: "REALTIME_START"; author: string; online: string[]; offline: string[]; ts: number }
 	| { event: "REALTIME_SEND"; target: string; ts: number }
 	| { event: "REALTIME_SKIP"; target: string; reason: string; ts: number }
