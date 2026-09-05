@@ -143,10 +143,17 @@ function EventRow({ entry }: { entry: LogEntry }) {
 }
 
 export function EventLog({ entries }: Props) {
-	const bottomRef = useRef<HTMLDivElement>(null)
+	const bodyRef = useRef<HTMLDivElement>(null)
 
 	useEffect(() => {
-		bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+		// Scroll the panel's OWN container directly. Unlike
+		// scrollIntoView(), this cannot walk up to an ancestor — .event-log
+		// and .layout are both `overflow: hidden` (not scrollable), so a
+		// scrollIntoView() call here was landing on body/html instead and
+		// dragging the whole page (feed included) along with it.
+		const el = bodyRef.current
+		if (!el) return
+		el.scrollTo({ top: el.scrollHeight, behavior: "smooth" })
 	}, [entries])
 
 	return (
@@ -156,7 +163,7 @@ export function EventLog({ entries }: Props) {
 				<span className="event-log-dot" />
 				<span className="event-log-live">LIVE</span>
 			</div>
-			<div className="event-log-body">
+			<div className="event-log-body" ref={bodyRef}>
 				{entries.length === 0 && (
 					<div className="log-empty">
 						Waiting for events…
@@ -167,7 +174,6 @@ export function EventLog({ entries }: Props) {
 				{entries.map((e) => (
 					<EventRow key={e.id} entry={e} />
 				))}
-				<div ref={bottomRef} />
 			</div>
 		</aside>
 	)

@@ -4,12 +4,33 @@ import { api, auth, clearTokens, decodeTokenPayload, getAccessToken } from "./ap
 import "./App.css"
 import { EventLog, type LogEntry } from "./components/event-log"
 import { useSystemEvents } from "./hooks/use-system-events"
-import type { AuthResponse, Post, SystemEvent, User } from "./types"
+import type { AuthResponse, NotificationHintWSMessage, Post, SystemEvent, User } from "./types"
 import { useFeedWebSocket } from "./hooks/use-feed-websocket"
 import { LoginForm } from "./components/login-form"
 import { useInfiniteScroll } from "./hooks/use-infinite-scroll"
+import {
+	acknowledgeNotificationHint,
+	reconcileNotificationHint,
+	type NotificationUIState,
+} from "./notification-hint.js"
 
 let logIdCounter = 0
+
+// Milestone 8.5: purely local UI state for the NEW_NOTIFICATION hint.
+// `notifications` and `unreadCount` are placeholders for the full
+// notification-UI milestone (not yet built — see
+// docs/milestone-8.5-realtime-notification-hint.md) and are never
+// populated or mutated here; keeping them in the shape now documents
+// the contract reconcileNotificationHint() enforces (see
+// notification-hint.d.ts / notification-hint.js): this state may
+// change `hasNewHint` only, never those two fields, until a real
+// GET /notifications / GET /notifications/unread-count fetch exists to
+// own them.
+const initialNotificationUIState: NotificationUIState = {
+	notifications: [],
+	unreadCount: 0,
+	hasNewHint: false,
+}
 
 export default function App() {
 	// auth state
@@ -24,6 +45,13 @@ export default function App() {
 	const [posting, setPosting] = useState(false)
 	const [newCount, setNewCount] = useState(0)
 	const [logEntries, setLogEntries] = useState<LogEntry[]>([])
+
+	// Milestone 8.5: NEW_NOTIFICATION hint affordance — see
+	// NotificationUIState above for why notifications/unreadCount stay
+	// empty here rather than being (incorrectly) derived from the hint.
+	const [notificationUI, setNotificationUI] = useState<NotificationUIState>(
+		initialNotificationUIState,
+	)
 
 	// pagination state (Milestone 6)
 	// nextCursor is opaque — never parsed, just stored and echoed back.
@@ -54,6 +82,7 @@ export default function App() {
 		setNewCount(0)
 		setHasMore(false)
 		setNextCursor(null)
+		setNotificationUI(initialNotificationUIState)
 		api.getTimeline(currentUser.id).then((page) => {
 			setTimeline(page.posts)
 			setNextCursor(page.next_cursor)
@@ -78,6 +107,7 @@ export default function App() {
 		setNewCount(0)
 		setNextCursor(null)
 		setHasMore(false)
+		setNotificationUI(initialNotificationUIState)
 	}
 
 	// timeline — top-of-feed refresh (the "N new posts" banner)
@@ -113,10 +143,26 @@ export default function App() {
 
 	const sentinelRef = useInfiniteScroll(loadMore, hasMore && !loadingMore)
 
-	// personal WebSocket (NEW_POST)
+	// Milestone 8.5: dismissing the hint affordance. Deliberately does NOT
+	// fetch GET /notifications or GET /notifications/unread-count here —
+	// wiring that REST reconciliation is part of the full notification-UI
+	// milestone. acknowledgeNotificationHint() only clears the local
+	// hasNewHint flag; see its docstring in src/notification-hint.js.
+	const dismissNotificationHint = useCallback(() => {
+		setNotificationUI((prev) => acknowledgeNotificationHint(prev))
+	}, [])
+
+	// personal WebSocket (NEW_POST + NEW_NOTIFICATION)
 	useFeedWebSocket(
 		accessToken,
 		useCallback(() => setNewCount((n) => n + 1), []),
+		useCallback((hint: NotificationHintWSMessage) => {
+			// reconcileNotificationHint is the ONLY function allowed to
+			// touch notificationUI here. It updates hasNewHint and nothing
+			// else — see src/notification-hint.js for the enforced contract
+			// and test-notification-hint.mjs for the standalone proof.
+			setNotificationUI((prev) => reconcileNotificationHint(prev, hint))
+		}, []),
 	)
 
 	// system event log
@@ -189,6 +235,15 @@ export default function App() {
 					<span className="logo-sub">Fanout-on-Write prototype</span>
 				</div>
 				<div className="header-user">
+					{notificationUI.hasNewHint && (
+						<button
+							className="notification-hint-btn"
+							onClick={dismissNotificationHint}
+							title="A live hint arrived — this is a placeholder affordance until the full notification panel (with authoritative GET /notifications) is built"
+						>
+							🔔
+						</button>
+					)}
 					<span className="header-avatar">{currentUser.name[0]}</span>
 					<span className="header-name">{currentUser.name}</span>
 					<button className="logout-btn" onClick={handleLogout}>
