@@ -11,7 +11,7 @@ Fanout-on-Write for feed delivery and WebSockets for real-time notification.
 
 When a user creates a post, the flow is:
 
-```
+```text
 POST /posts
   │
   ├── 1. Persist post → PostgreSQL
@@ -134,18 +134,21 @@ prototype; a pre-production concern before any public access.
 ## 4. Realistic Scaling Limits of This Architecture
 
 **Where the architecture holds comfortably:**
+
 - Up to ~1,500 registered users, ~200–300 concurrent users
 - Up to ~20 posts/second sustained
 - Follower counts below ~2,000 per user (fanout stays under 50–100ms per event)
 - Single-region, single-server deployment
 
 **Where it begins to degrade:**
+
 - Above ~300 concurrent WebSocket connections on a budget VPS, memory pressure from the
   single process becomes visible
 - Above ~500 concurrent HTTP requests, the single asyncio event loop starts queuing I/O
 - Any user with 5,000+ followers will cause fanout to visibly block other events on the bus
 
 **Where it breaks structurally:**
+
 - Adding a second server/process: WebSocket routing fails (connections aren't shared)
 - Redis Pub/Sub message drop during startup or worker reload: fanout silently misses
 - Sustained post rate above ~50/second: the sequential fanout loop creates a backpressure
@@ -197,6 +200,7 @@ without rewriting every route, consumer, and WebSocket handler. It's cheaper to 
 than after 5 more features exist.
 
 **What it introduces:**
+
 - `POST /auth/register`, `POST /auth/login` → issues a JWT
 - Every route reads `user_id` from the token, not from query params
 - WebSocket handshake validates the token before accepting the connection
@@ -509,7 +513,7 @@ than re-deriving each time a new subsystem needs one of them.
 The optimization is always disposable — safe to lose, rebuildable or
 simply absent without corrupting correctness.
 
-```
+```text
 M2  Redis Streams (durable, at-least-once)   ←→  Redis Pub/Sub (fire-and-forget)
 M5  Postgres (source of truth)               ←→  Redis post cache (disposable)
 M8  Postgres notification rows (durable)     ←→  WebSocket push (best-effort hint)
@@ -526,7 +530,7 @@ durable side and a live push sits on the disposable side.
 The event bus is the sole integration point between subsystems; producers
 never know which or how many consumers exist.
 
-```
+```text
 PostCreated    →  fanout_consumer, realtime_consumer, on_post_created (M8)
 FollowCreated  →  on_follow_created (M8)
 ```
@@ -541,7 +545,7 @@ Infrastructure provides a domain-agnostic capability; product decisions
 sit in a separate layer on top, documented as explicit ADRs rather than
 buried in the mechanism.
 
-```
+```text
 PubSubRouter (M7.5)  →  ConnectionManager, SystemBroadcaster (policy)
 db.py (M8)            →  app/notifications.py (policy: identity, refollow semantics)
 ```
@@ -555,7 +559,7 @@ fourth.
 
 ## Summary View
 
-```
+```text
 Current → M1 → M2 → M3 → M4
 Single process, in-memory WS  │
 no auth, Pub/Sub bus           │
@@ -591,4 +595,3 @@ M15: Multi-region (global distribution)
 Each milestone builds on the one before it. None of them require throwing away what
 was built previously — they are substitutions or additions at specific seams.
 That is the mark of an architecture with the right boundaries from the start.
-```

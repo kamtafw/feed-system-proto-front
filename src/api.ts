@@ -8,7 +8,7 @@
  */
 
 import { HTTP_BASE } from "./config"
-import type { AuthResponse, TimelinePage, User } from "./types"
+import type { AuthResponse, NotificationPage, TimelinePage, User } from "./types"
 
 const BASE = HTTP_BASE
 
@@ -155,4 +155,24 @@ export const api = {
 
 	unfollow: (targetId: string): Promise<void> =>
 		authedFetch(`${BASE}/me/follow/${targetId}`, { method: "DELETE" }).then(() => undefined),
+
+	// Milestone 8.6 — all four routes already existed from M8; this is
+	// the first frontend consumer of them. cursor is opaque here too,
+	// same discipline as getTimeline — encoded server-side as
+	// "{created_at}:{id}", never parsed or constructed on the frontend.
+	getNotifications: (cursor?: string): Promise<NotificationPage> => {
+		const url = cursor
+			? `${BASE}/notifications?cursor=${encodeURIComponent(cursor)}`
+			: `${BASE}/notifications`
+		return authedFetch(url).then((r) => r.json())
+	},
+
+	getUnreadCount: (): Promise<{ count: number }> =>
+		authedFetch(`${BASE}/notifications/unread-count`).then((r) => r.json()),
+
+	markNotificationRead: (id: number): Promise<{ ok: boolean }> =>
+		authedFetch(`${BASE}/notifications/${id}/read`, { method: "POST" }).then((r) => r.json()),
+
+	markAllNotificationsRead: (): Promise<{ marked_read: number }> =>
+		authedFetch(`${BASE}/notifications/read-all`, { method: "POST" }).then((r) => r.json()),
 }

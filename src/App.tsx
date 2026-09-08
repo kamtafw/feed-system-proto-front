@@ -1,35 +1,32 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api, auth, clearTokens, decodeTokenPayload, getAccessToken } from "./api"
 import "./App.css"
 import { EventLog, type LogEntry } from "./components/event-log"
 import { useSystemEvents } from "./hooks/use-system-events"
-import type { AuthResponse, NotificationHintWSMessage, Post, SystemEvent, User } from "./types"
+import type { AuthResponse, Notification, Post, SystemEvent, User } from "./types"
 import { useFeedWebSocket } from "./hooks/use-feed-websocket"
 import { LoginForm } from "./components/login-form"
 import { useInfiniteScroll } from "./hooks/use-infinite-scroll"
-import {
-	acknowledgeNotificationHint,
-	reconcileNotificationHint,
-	type NotificationUIState,
-} from "./notification-hint.js"
 
 let logIdCounter = 0
 
-// Milestone 8.5: purely local UI state for the NEW_NOTIFICATION hint.
-// `notifications` and `unreadCount` are placeholders for the full
-// notification-UI milestone (not yet built — see
-// docs/milestone-8.5-realtime-notification-hint.md) and are never
-// populated or mutated here; keeping them in the shape now documents
-// the contract reconcileNotificationHint() enforces (see
-// notification-hint.d.ts / notification-hint.js): this state may
-// change `hasNewHint` only, never those two fields, until a real
-// GET /notifications / GET /notifications/unread-count fetch exists to
-// own them.
-const initialNotificationUIState: NotificationUIState = {
-	notifications: [],
-	unreadCount: 0,
-	hasNewHint: false,
+// Milestone 8.6: renders a Notification row's verb. type is a closed
+// union ("NEW_POST" | "NEW_FOLLOWER") so the default branch is
+// currently unreachable — kept anyway as a defensive fallback matching
+// the style already used elsewhere in this app (e.g.
+// notify_new_follower_hint's follower_id fallback), so a future
+// notification type degrades gracefully instead of crashing this
+// component before anyone remembers to update it here.
+function describeNotification(n: Notification): string {
+	switch (n.type) {
+		case "NEW_FOLLOWER":
+			return "followed you"
+		case "NEW_POST":
+			return "posted a new post"
+		default:
+			return "did something"
+	}
 }
 
 export default function App() {
@@ -46,18 +43,35 @@ export default function App() {
 	const [newCount, setNewCount] = useState(0)
 	const [logEntries, setLogEntries] = useState<LogEntry[]>([])
 
-	// Milestone 8.5: NEW_NOTIFICATION hint affordance — see
-	// NotificationUIState above for why notifications/unreadCount stay
-	// empty here rather than being (incorrectly) derived from the hint.
-	const [notificationUI, setNotificationUI] = useState<NotificationUIState>(
-		initialNotificationUIState,
-	)
-
 	// pagination state (Milestone 6)
 	// nextCursor is opaque — never parsed, just stored and echoed back.
 	const [nextCursor, setNextCursor] = useState<string | null>(null)
 	const [hasMore, setHasMore] = useState(false) // false until the first page confirms otherwise
 	const [loadingMore, setLoadingMore] = useState(false)
+
+	// Milestone 8.6: notification state. REST-backed by construction —
+	// nothing here is ever set from a NEW_NOTIFICATION hint's payload,
+	// only from GET /notifications / GET /notifications/unread-count
+	// responses. See docs/milestone-8.6-notification-reconciliation.md.
+	const [notifications, setNotifications] = useState<Notification[]>([])
+	const [notifCursor, setNotifCursor] = useState<string | null>(null)
+	const [notifHasMore, setNotifHasMore] = useState(false)
+	const [loadingMoreNotifs, setLoadingMoreNotifs] = useState(false)
+	const [unreadCount, setUnreadCount] = useState(0)
+	const [notifPanelOpen, setNotifPanelOpen] = useState(false)
+
+	// M8.6 ADR-6: per-function sequence counters guarding against an
+	// older hint-triggered (or panel-open-triggered) response arriving
+	// after a newer one and overwriting fresher state. loadTimeline()
+	// has no equivalent guard and doesn't need one — its only trigger is
+	// a human click, with no realistic overlap. loadNotifications() and
+	// refreshUnreadCount() gain a trigger loadTimeline() doesn't have —
+	// NEW_NOTIFICATION hints, fired by independent backend events with
+	// no human reaction-time buffer between them — so copying
+	// loadTimeline()'s unguarded shape here would carry a harmless race
+	// into a context where it's actually reachable.
+	const notifFetchSeq = useRef(0)
+	const unreadFetchSeq = useRef(0)
 
 	// restore session from localStorage on mount
 	useEffect(() => {
@@ -76,13 +90,99 @@ export default function App() {
 		}
 	}, [])
 
+	// Milestone 8.6 — notification loaders/actions. Defined here, BEFORE
+	// the mount-data effect below, so that effect can call them directly
+	// rather than duplicating their fetch logic inline (unlike
+	// loadTimeline(), which the mount effect duplicates rather than
+	// calls). That duplication would be fine for loadTimeline() — its
+	// mount-time fetch and its banner-click fetch don't race in any way
+	// that matters — but it would reopen exactly the race ADR-6 exists
+	// to close: a mount-time fetch and a hint-triggered fetch both
+	// running through their OWN separate un-sequenced logic could still
+	// stomp each other. Routing every trigger (mount, hint, panel-open)
+	// through these same two functions is what makes the sequence guard
+	// actually cover every path, not just some of them.
+
+	const loadNotifications = useCallback(() => {
+		if (!currentUser) return
+		const seq = ++notifFetchSeq.current
+		api
+			.getNotifications()
+			.then((page) => {
+				if (seq !== notifFetchSeq.current) return // a newer call already started — discard this stale response
+				setNotifications(page.notifications)
+				setNotifCursor(page.next_cursor)
+				setNotifHasMore(page.next_cursor !== null)
+			})
+			.catch((e) => console.error("Failed to load notifications:", e))
+	}, [currentUser])
+
+	// notifications — infinite pagination (append older rows to the tail).
+	// Mirrors loadMore()'s existing loadingMore-boolean guard exactly,
+	// not the sequence-counter approach above — this operation's trigger
+	// (user-paced pagination) matches loadMore()'s trigger shape, not
+	// the hint's, so the same structural "never two in flight" guard
+	// that already works for loadMore() applies here too.
+	const loadMoreNotifications = useCallback(() => {
+		if (!currentUser || !notifHasMore || loadingMoreNotifs) return
+		setLoadingMoreNotifs(true)
+		api
+			.getNotifications(notifCursor ?? undefined)
+			.then((page) => {
+				setNotifications((prev) => [...prev, ...page.notifications])
+				setNotifCursor(page.next_cursor)
+				setNotifHasMore(page.next_cursor !== null)
+			})
+			.catch((e) => console.error("Failed to load more notifications:", e))
+			.finally(() => setLoadingMoreNotifs(false))
+	}, [currentUser, notifHasMore, loadingMoreNotifs, notifCursor])
+
+	const refreshUnreadCount = useCallback(() => {
+		if (!currentUser) return
+		const seq = ++unreadFetchSeq.current
+		api
+			.getUnreadCount()
+			.then(({ count }) => {
+				if (seq !== unreadFetchSeq.current) return
+				setUnreadCount(count)
+			})
+			.catch((e) => console.error("Failed to refresh unread count:", e))
+	}, [currentUser])
+
+	const markOneRead = useCallback(
+		(id: number) => {
+			api
+				.markNotificationRead(id)
+				.then(() => {
+					loadNotifications()
+					refreshUnreadCount()
+				})
+				.catch((e) => console.error("Failed to mark notification read:", e))
+		},
+		[loadNotifications, refreshUnreadCount],
+	)
+
+	const markAllRead = useCallback(() => {
+		api
+			.markAllNotificationsRead()
+			.then(() => {
+				loadNotifications()
+				refreshUnreadCount()
+			})
+			.catch((e) => console.error("Failed to mark all notifications read:", e))
+	}, [loadNotifications, refreshUnreadCount])
+
 	// load data when user changes
 	useEffect(() => {
 		if (!currentUser) return
 		setNewCount(0)
 		setHasMore(false)
 		setNextCursor(null)
-		setNotificationUI(initialNotificationUIState)
+		setNotifications([])
+		setNotifCursor(null)
+		setNotifHasMore(false)
+		setNotifPanelOpen(false)
+		setUnreadCount(0)
 		api.getTimeline(currentUser.id).then((page) => {
 			setTimeline(page.posts)
 			setNextCursor(page.next_cursor)
@@ -90,7 +190,17 @@ export default function App() {
 		})
 		api.getFollowing().then((ids) => setFollowing(new Set(ids)))
 		api.getUsers().then(setUsers)
-	}, [currentUser])
+		loadNotifications()
+		refreshUnreadCount()
+	}, [currentUser, loadNotifications, refreshUnreadCount])
+
+	// notifications — fetch fresh page 1 every time the panel opens.
+	// Same reset-and-refetch shape as loadTimeline()'s banner click:
+	// closes any staleness gap regardless of whether every intervening
+	// hint actually arrived while the panel was closed.
+	useEffect(() => {
+		if (notifPanelOpen) loadNotifications()
+	}, [notifPanelOpen, loadNotifications])
 
 	// auth handlers
 	const handleAuth = (response: AuthResponse) => {
@@ -107,7 +217,11 @@ export default function App() {
 		setNewCount(0)
 		setNextCursor(null)
 		setHasMore(false)
-		setNotificationUI(initialNotificationUIState)
+		setNotifications([])
+		setNotifCursor(null)
+		setNotifHasMore(false)
+		setNotifPanelOpen(false)
+		setUnreadCount(0)
 	}
 
 	// timeline — top-of-feed refresh (the "N new posts" banner)
@@ -143,26 +257,21 @@ export default function App() {
 
 	const sentinelRef = useInfiniteScroll(loadMore, hasMore && !loadingMore)
 
-	// Milestone 8.5: dismissing the hint affordance. Deliberately does NOT
-	// fetch GET /notifications or GET /notifications/unread-count here —
-	// wiring that REST reconciliation is part of the full notification-UI
-	// milestone. acknowledgeNotificationHint() only clears the local
-	// hasNewHint flag; see its docstring in src/notification-hint.js.
-	const dismissNotificationHint = useCallback(() => {
-		setNotificationUI((prev) => acknowledgeNotificationHint(prev))
-	}, [])
+	// Milestone 8.6 ADR-1: the hint is a pure trigger. It NEVER receives
+	// or reads any field from the WS message — see
+	// useFeedWebSocket's onNotificationHint signature, which takes no
+	// arguments at all, making that structurally true rather than just
+	// documented.
+	const handleNotificationHint = useCallback(() => {
+		refreshUnreadCount()
+		if (notifPanelOpen) loadNotifications()
+	}, [notifPanelOpen, refreshUnreadCount, loadNotifications])
 
 	// personal WebSocket (NEW_POST + NEW_NOTIFICATION)
 	useFeedWebSocket(
 		accessToken,
 		useCallback(() => setNewCount((n) => n + 1), []),
-		useCallback((hint: NotificationHintWSMessage) => {
-			// reconcileNotificationHint is the ONLY function allowed to
-			// touch notificationUI here. It updates hasNewHint and nothing
-			// else — see src/notification-hint.js for the enforced contract
-			// and test-notification-hint.mjs for the standalone proof.
-			setNotificationUI((prev) => reconcileNotificationHint(prev, hint))
-		}, []),
+		handleNotificationHint,
 	)
 
 	// system event log
@@ -222,6 +331,20 @@ export default function App() {
 
 	const otherUsers = users.filter((u) => u.id !== currentUser?.id)
 
+	// Milestone 8.6: the REST Notification row only carries actor_id, not
+	// a display name (confirmed against the actual M8 type/route before
+	// assuming otherwise). Rather than adding a backend field — explicitly
+	// out of scope, "no new backend code" — this resolves display names
+	// client-side from `users`, which is already fetched on mount for the
+	// sidebar. Falls back to the raw id if a user is somehow missing from
+	// that list, matching the defensive-fallback style already used
+	// elsewhere (e.g. notify_new_follower_hint's follower_id fallback).
+	const usersById = useMemo(() => {
+		const map: Record<string, User> = {}
+		for (const u of users) map[u.id] = u
+		return map
+	}, [users])
+
 	if (!currentUser) {
 		return <LoginForm onAuth={handleAuth} />
 	}
@@ -235,15 +358,65 @@ export default function App() {
 					<span className="logo-sub">Fanout-on-Write prototype</span>
 				</div>
 				<div className="header-user">
-					{notificationUI.hasNewHint && (
+					<div className="notification-wrap">
 						<button
 							className="notification-hint-btn"
-							onClick={dismissNotificationHint}
-							title="A live hint arrived — this is a placeholder affordance until the full notification panel (with authoritative GET /notifications) is built"
+							onClick={() => setNotifPanelOpen((open) => !open)}
+							title="Notifications"
 						>
 							🔔
+							{unreadCount > 0 && <span className="notification-badge">{unreadCount}</span>}
 						</button>
-					)}
+
+						{notifPanelOpen && (
+							<div className="notification-panel">
+								<div className="notification-panel-header">
+									<span>Notifications</span>
+									<button className="notification-mark-all" onClick={markAllRead}>
+										Mark all read
+									</button>
+								</div>
+								<div className="notification-list">
+									{notifications.length === 0 ? (
+										<div className="notification-empty">No notifications yet.</div>
+									) : (
+										notifications.map((n) => {
+											const actorName = usersById[n.actor_id]?.name ?? n.actor_id
+											return (
+												<div
+													key={n.id}
+													className={`notification-item ${
+														n.read_at === null ? "notification-item-unread" : ""
+													}`}
+													onClick={() => {
+														if (n.read_at === null) markOneRead(n.id)
+													}}
+												>
+													<div className="notification-item-avatar">{actorName[0]}</div>
+													<div className="notification-item-body">
+														<span className="notification-item-actor">{actorName}</span>{" "}
+														{describeNotification(n)}
+														<div className="notification-item-time">
+															{new Date(n.created_at * 1000).toLocaleTimeString()}
+														</div>
+													</div>
+												</div>
+											)
+										})
+									)}
+									{notifHasMore && (
+										<button
+											className="notification-load-more"
+											onClick={loadMoreNotifications}
+											disabled={loadingMoreNotifs}
+										>
+											{loadingMoreNotifs ? "Loading…" : "Load more"}
+										</button>
+									)}
+								</div>
+							</div>
+						)}
+					</div>
 					<span className="header-avatar">{currentUser.name[0]}</span>
 					<span className="header-name">{currentUser.name}</span>
 					<button className="logout-btn" onClick={handleLogout}>
