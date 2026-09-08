@@ -852,6 +852,14 @@ body {
  * Fixed-size circle + centered content is the same pattern this app
  * already uses to prevent glyph metrics from ever affecting layout —
  * see .header-avatar, .compose-avatar, .person-avatar.
+ *
+ * Milestone 8.6: this button is no longer a conditionally-rendered
+ * placeholder — it's always present, doubling as the real unread-count
+ * badge anchor and panel toggle. `position: relative` was added so
+ * `.notification-badge` (absolutely positioned) can anchor to it
+ * WITHOUT affecting this button's own box size — absolutely positioned
+ * children never contribute to their parent's layout dimensions, so
+ * this cannot reopen the header-height bug described above.
  */
 .notification-hint-btn {
 	width: 28px;
@@ -868,8 +876,182 @@ body {
 	background: transparent;
 	cursor: pointer;
 	transition: background 0.15s;
+	position: relative;
 }
 
 .notification-hint-btn:hover {
 	background: var(--indigo);
+}
+
+/* Milestone 8.6 — notification list/badge/panel. Deliberately minimal:
+ * this milestone is about correct reconciliation, not a UI-design
+ * exercise. No animations, no click-outside-to-close (click the bell
+ * again to close) — kept out on purpose to match the milestone's
+ * "deliberately functional" scope. */
+
+.notification-wrap {
+	position: relative;
+}
+
+.notification-badge {
+	position: absolute;
+	top: -4px;
+	right: -4px;
+	min-width: 16px;
+	height: 16px;
+	padding: 0 4px;
+	border-radius: 8px;
+	background: var(--red);
+	color: #fff;
+	font-size: 10px;
+	font-weight: 700;
+	font-family: var(--mono);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	line-height: 1;
+}
+
+.notification-panel {
+	position: absolute;
+	top: calc(100% + 8px);
+	right: 0;
+	width: 320px;
+	max-height: 400px;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	z-index: 200;
+	text-align: left;
+}
+
+.notification-panel-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 10px 14px;
+	border-bottom: 1px solid var(--border);
+	background: var(--surface-2);
+	font-size: 12px;
+	font-weight: 700;
+	color: var(--text-dim);
+	flex-shrink: 0;
+}
+
+.notification-mark-all {
+	background: transparent;
+	border: none;
+	color: var(--indigo);
+	font-size: 11px;
+	font-weight: 600;
+	cursor: pointer;
+	font-family: inherit;
+}
+
+.notification-mark-all:hover {
+	text-decoration: underline;
+}
+
+.notification-list {
+	overflow-y: auto;
+	flex: 1;
+}
+
+.notification-list::-webkit-scrollbar {
+	width: 3px;
+}
+.notification-list::-webkit-scrollbar-track {
+	background: transparent;
+}
+.notification-list::-webkit-scrollbar-thumb {
+	background: var(--border);
+}
+
+.notification-empty {
+	padding: 24px 14px;
+	text-align: center;
+	color: var(--text-muted);
+	font-size: 12px;
+}
+
+.notification-item {
+	display: flex;
+	gap: 8px;
+	padding: 10px 14px;
+	border-bottom: 1px solid var(--border);
+	cursor: pointer;
+	transition: background 0.15s;
+}
+
+.notification-item:last-child {
+	border-bottom: none;
+}
+
+.notification-item:hover {
+	background: var(--surface-2);
+}
+
+.notification-item-unread {
+	background: rgba(99, 102, 241, 0.08);
+}
+
+.notification-item-avatar {
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	background: var(--indigo-dim);
+	color: #fff;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 12px;
+	font-weight: 700;
+	flex-shrink: 0;
+}
+
+.notification-item-body {
+	flex: 1;
+	min-width: 0;
+	font-size: 12px;
+	color: var(--text-dim);
+	line-height: 1.5;
+}
+
+.notification-item-actor {
+	font-weight: 700;
+	color: var(--text);
+}
+
+.notification-item-time {
+	font-size: 10px;
+	color: var(--text-muted);
+	margin-top: 2px;
+	font-family: var(--mono);
+}
+
+.notification-load-more {
+	width: 100%;
+	padding: 8px;
+	background: transparent;
+	border: none;
+	border-top: 1px solid var(--border);
+	color: var(--indigo);
+	font-size: 11px;
+	font-weight: 600;
+	cursor: pointer;
+	font-family: inherit;
+	flex-shrink: 0;
+}
+
+.notification-load-more:hover:not(:disabled) {
+	background: var(--surface-2);
+}
+
+.notification-load-more:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
 }

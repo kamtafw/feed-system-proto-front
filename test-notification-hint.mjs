@@ -1,36 +1,21 @@
-// test-notification-hint.mjs — Milestone 8.5 verification for the
-// NEW_NOTIFICATION WebSocket hint's reconciliation contract.
+// test-notification-hint.mjs — verification for isNotificationHint(),
+// the one piece of notification-hint.js that survives Milestone 8.6
+// (see ADR-5: reconcileNotificationHint, acknowledgeNotificationHint,
+// and NotificationUIState were retired along with their entire reason
+// for existing — see notification-hint.js's module docstring).
 //
 // Run directly, no build step, no test framework:
 //     node test-notification-hint.mjs
 //
-// Mirrors the backend's test_*.py convention: a standalone script that
-// exercises the REAL functions the app uses (src/notification-hint.js),
-// not a reimplementation of them — use-feed-websocket.ts imports the
-// identical module this script does.
-//
 // What it proves:
-//   1. isNotificationHint() correctly discriminates NEW_NOTIFICATION
-//      messages from other /ws/feed message shapes (e.g. NEW_POST).
-//   2. The hint payload is structurally distinct from the REST
-//      Notification representation — no id/created_at/read_at.
-//   3. reconcileNotificationHint() never mutates `notifications` or
-//      `unreadCount` — the only field it changes is the local
-//      `hasNewHint` affordance flag.
-//   4. reconcileNotificationHint() rejects (throws on) a hint payload
-//      that DOES carry a REST-only field — a loud dev-time guard
-//      against the wire contract silently drifting toward the
-//      authoritative shape.
-//   5. acknowledgeNotificationHint() clears hasNewHint without touching
-//      anything else.
+//   1. A NEW_POST message is correctly NOT identified as a notification
+//      hint.
+//   2. A NEW_NOTIFICATION message correctly IS identified as one.
+//   3. Malformed/absent messages (null, a bare string, an object with
+//      no type field) don't crash the check — they're just not hints.
 
 import assert from "node:assert/strict"
-import {
-	isNotificationHint,
-	reconcileNotificationHint,
-	acknowledgeNotificationHint,
-	REST_ONLY_FIELDS,
-} from "./src/notification-hint.js"
+import { isNotificationHint } from "./src/notification-hint.js"
 
 const SEP = "—".repeat(56)
 
@@ -39,12 +24,15 @@ function section(n, title) {
 }
 
 console.log(SEP)
-console.log(" FanoutFeed — NEW_NOTIFICATION hint verification (Milestone 8.5)")
+console.log(" FanoutFeed — NEW_NOTIFICATION discrimination (Milestone 8.6)")
 console.log(SEP)
 
-// [1] Message discrimination
-section(1, "isNotificationHint discriminates message types")
+section(1, "NEW_POST is not treated as a hint")
 const newPostMsg = { type: "NEW_POST", post_id: "p1", author_id: "alice", author_name: "Alice" }
+assert.equal(isNotificationHint(newPostMsg), false)
+console.log("    ✅  NEW_POST correctly excluded")
+
+section(2, "NEW_NOTIFICATION is treated as a hint")
 const hintMsg = {
 	type: "NEW_NOTIFICATION",
 	notification_type: "NEW_POST",
@@ -53,64 +41,17 @@ const hintMsg = {
 	object_type: "post",
 	object_id: "p1",
 }
-assert.equal(isNotificationHint(newPostMsg), false, "NEW_POST should not be treated as a hint")
-assert.equal(isNotificationHint(hintMsg), true, "NEW_NOTIFICATION should be treated as a hint")
-console.log("    ✅  NEW_POST and NEW_NOTIFICATION messages are correctly distinguished")
+assert.equal(isNotificationHint(hintMsg), true)
+console.log("    ✅  NEW_NOTIFICATION correctly included")
 
-// [2] Payload is structurally distinct from the REST representation
-section(2, "Hint payload shape is distinct from the REST Notification shape")
-for (const field of REST_ONLY_FIELDS) {
-	assert.ok(!(field in hintMsg), `Hint payload should never carry REST-only field '${field}'`)
-}
-console.log(`    ✅  Hint payload carries none of: ${REST_ONLY_FIELDS.join(", ")}`)
-
-// [3] Reconciliation never mutates authoritative state
-section(3, "reconcileNotificationHint never touches notifications/unreadCount")
-const initialState = {
-	notifications: [
-		{
-			id: 1,
-			recipient_id: "bob",
-			actor_id: "alice",
-			type: "NEW_POST",
-			object_type: "post",
-			object_id: "p0",
-			created_at: 1,
-			read_at: null,
-		},
-	],
-	unreadCount: 3,
-	hasNewHint: false,
-}
-const afterHint = reconcileNotificationHint(initialState, hintMsg)
-assert.equal(
-	afterHint.notifications,
-	initialState.notifications,
-	"notifications array reference must be unchanged",
-)
-assert.equal(afterHint.unreadCount, initialState.unreadCount, "unreadCount must be unchanged")
-assert.equal(afterHint.hasNewHint, true, "hasNewHint should flip to true")
-console.log("    ✅  notifications and unreadCount untouched; only hasNewHint changed")
-
-// [4] A hint carrying a REST-only field is rejected loudly
-section(4, "A malformed hint carrying a REST-only field is rejected")
-const malformedHint = { ...hintMsg, id: 999 }
-assert.throws(
-	() => reconcileNotificationHint(initialState, malformedHint),
-	/REST-only field/,
-	"reconcileNotificationHint should throw if the payload drifts toward the REST shape",
-)
-console.log("    ✅  A hint shaped like the REST representation is rejected, not silently accepted")
-
-// [5] Acknowledging clears only the local flag
-section(5, "acknowledgeNotificationHint clears hasNewHint only")
-const acked = acknowledgeNotificationHint(afterHint)
-assert.equal(acked.hasNewHint, false, "hasNewHint should be cleared")
-assert.equal(acked.notifications, afterHint.notifications, "notifications must still be untouched")
-assert.equal(acked.unreadCount, afterHint.unreadCount, "unreadCount must still be untouched")
-console.log("    ✅  Acknowledging the hint only clears the local affordance flag")
+section(3, "Malformed input doesn't crash the check")
+assert.equal(isNotificationHint(null), false)
+assert.equal(isNotificationHint(undefined), false)
+assert.equal(isNotificationHint("not an object"), false)
+assert.equal(isNotificationHint({}), false)
+console.log("    ✅  null, undefined, a string, and an empty object are all safely rejected")
 
 console.log(`\n${SEP}`)
-console.log(" NEW_NOTIFICATION hint contract verified — distinct payload shape,")
-console.log(" zero mutation of authoritative state, malformed payloads rejected.")
+console.log(" isNotificationHint() verified — the sole survivor of M8.5's")
+console.log(" notification-hint.js after M8.6's ADR-5 retirement.")
 console.log(SEP)
